@@ -63,6 +63,16 @@ vim_filter_search = false
 # [picker.filter_keys]
 # server = "ctrl-g"
 
+# Optional: extra Ctrl keys that move the selection, also while typing a search.
+# Arrow keys keep working. Values use the same forms as filter_keys.
+# A movement key takes over a source filter on the same key (ctrl-p is the project
+# filter by default), so remap that filter above to keep a shortcut for it.
+# Keys owned by fixed actions (ctrl-c, ctrl-h, ctrl-u, ctrl-x, ctrl-b, ctrl-o)
+# and a Ctrl directory_template_key are ignored.
+# [picker.movement_keys]
+# up = "ctrl-p"
+# down = "ctrl-n"
+
 [notifications]
 # Show Navigator success/error notifications.
 enabled = true

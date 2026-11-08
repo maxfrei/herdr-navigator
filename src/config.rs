@@ -63,6 +63,16 @@ pub(crate) struct PickerConfig {
     pub(crate) vim_filter_search: bool,
     #[serde(default)]
     pub(crate) filter_keys: HashMap<String, String>,
+    #[serde(default)]
+    pub(crate) movement_keys: MovementKeysConfig,
+}
+
+#[derive(Clone, Default, Deserialize)]
+pub(crate) struct MovementKeysConfig {
+    #[serde(default)]
+    pub(crate) up: Option<String>,
+    #[serde(default)]
+    pub(crate) down: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -277,6 +287,7 @@ impl Default for PickerConfig {
             vim_mode: false,
             vim_filter_search: false,
             filter_keys: HashMap::new(),
+            movement_keys: MovementKeysConfig::default(),
         }
     }
 }
@@ -652,6 +663,23 @@ mod tests {
             Some(Source::Agent)
         );
         assert_eq!(config.picker.filter_key(&Source::Server), Some('g'));
+    }
+
+    #[test]
+    fn parses_movement_keys() {
+        let config: Config = toml::from_str(
+            r#"
+            [picker.movement_keys]
+            up = "ctrl+p"
+            down = "^n"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.picker.movement_keys.up.as_deref(), Some("ctrl+p"));
+        assert_eq!(config.picker.movement_keys.down.as_deref(), Some("^n"));
+        assert!(PickerConfig::default().movement_keys.up.is_none());
+        assert!(Config::default().picker.movement_keys.down.is_none());
     }
 
     #[test]

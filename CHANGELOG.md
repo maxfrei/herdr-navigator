@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 ### Added
 - Agent rows show the current terminal task and tab label when Herdr provides them, alongside fuzzy search and Preview support.
 - Navigator-specific `[theme].name` and `[theme.custom]` overrides. Navigator layers inherited Herdr custom tokens beneath its own custom tokens ([#20](https://github.com/thanhdat77/herdr-navigator/issues/20)).
+- `[picker.movement_keys]` adds configurable Ctrl keys for moving the selection, such as `ctrl-p` / `ctrl-n` or `ctrl-k` / `ctrl-j`, that also work while typing a search.
 
 ### Fixed
 - Agent selection now focuses the selected tab after agent focus. This sequence moves attached clients on Herdr 0.9.0 ([#41](https://github.com/thanhdat77/herdr-navigator/issues/41)).

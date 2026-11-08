@@ -1408,6 +1408,149 @@ mod tests {
             .matches(&app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
     }
 
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    fn emacs_move_app() -> App {
+        let mut app = App::new(Config::default(), Theme::load(None, None, false));
+        app.config.picker.movement_keys.up = Some("ctrl+p".into());
+        app.config.picker.movement_keys.down = Some("ctrl+n".into());
+        app.entries = vec![
+            entry(Source::Zoxide, "/a"),
+            entry(Source::Zoxide, "/b"),
+            entry(Source::Zoxide, "/c"),
+        ];
+        app.filtered = vec![0, 1, 2];
+        app.filtered_scores = vec![0; 3];
+        app
+    }
+
+    fn binding_label(app: &App, command: Command) -> String {
+        keybindings(app)
+            .into_iter()
+            .find(|binding| binding.command == command)
+            .unwrap()
+            .key_label(app)
+    }
+
+    #[test]
+    fn movement_keys_move_selection_while_typing() {
+        let mut app = emacs_move_app();
+        app.query = "foo".into();
+
+        handle_key(&mut app, ctrl('n'));
+        handle_key(&mut app, ctrl('n'));
+        assert_eq!(app.selected, 2);
+
+        handle_key(&mut app, ctrl('p'));
+        assert_eq!(app.selected, 1);
+
+        assert_eq!(app.query, "foo");
+        assert_eq!(app.source_filter, None);
+
+        handle_key(&mut app, key(KeyCode::Down));
+        assert_eq!(app.selected, 2);
+        handle_key(&mut app, key(KeyCode::Up));
+        assert_eq!(app.selected, 1);
+    }
+
+    #[test]
+    fn vim_style_ctrl_j_and_ctrl_k_move_selection() {
+        let mut app = emacs_move_app();
+        app.config.picker.movement_keys.up = Some("ctrl-k".into());
+        app.config.picker.movement_keys.down = Some("ctrl-j".into());
+
+        handle_key(&mut app, ctrl('j'));
+        assert_eq!(app.selected, 1);
+        handle_key(&mut app, ctrl('k'));
+        assert_eq!(app.selected, 0);
+    }
+
+    #[test]
+    fn without_movement_keys_ctrl_p_filters_projects() {
+        let mut app = emacs_move_app();
+        app.config.picker.movement_keys = Default::default();
+
+        handle_key(&mut app, ctrl('n'));
+        assert_eq!(app.selected, 0);
+
+        handle_key(&mut app, ctrl('p'));
+        assert_eq!(app.source_filter, Some(Source::Project));
+    }
+
+    #[test]
+    fn remapped_filter_coexists_with_movement_key() {
+        let mut app = emacs_move_app();
+        app.config
+            .picker
+            .filter_keys
+            .insert("project".into(), "ctrl-g".into());
+
+        handle_key(&mut app, ctrl('g'));
+        assert_eq!(app.source_filter, Some(Source::Project));
+    }
+
+    #[test]
+    fn filter_losing_its_chord_to_a_movement_key_is_not_advertised() {
+        let mut app = emacs_move_app();
+        assert_eq!(binding_label(&app, Command::Filter(Source::Project)), "");
+
+        app.config.picker.vim_mode = true;
+        assert_eq!(binding_label(&app, Command::Filter(Source::Project)), "p");
+        handle_key(&mut app, key(KeyCode::Char('p')));
+        assert_eq!(app.source_filter, Some(Source::Project));
+    }
+
+    #[test]
+    fn fixed_action_keys_cannot_become_movement_keys() {
+        for fixed in ["ctrl-c", "ctrl-h", "ctrl-u", "ctrl-x", "ctrl-b", "ctrl-o"] {
+            let mut app = emacs_move_app();
+            app.config.picker.movement_keys.up = Some(fixed.into());
+            assert_eq!(binding_label(&app, Command::MoveUp), "↑", "{fixed}");
+        }
+
+        let mut app = emacs_move_app();
+        app.config.picker.movement_keys.up = Some("ctrl-c".into());
+        app.config.picker.movement_keys.down = Some("ctrl-u".into());
+        app.query = "foo".into();
+        handle_key(&mut app, ctrl('u'));
+        assert!(app.query.is_empty());
+        assert!(matches!(handle_key(&mut app, ctrl('c')), Action::Quit));
+    }
+
+    #[test]
+    fn directory_template_key_cannot_become_a_movement_key() {
+        let mut app = emacs_move_app();
+        app.config.picker.directory_template_key = "ctrl-n".into();
+
+        assert_eq!(binding_label(&app, Command::MoveDown), "↓");
+        assert_eq!(binding_label(&app, Command::MoveUp), "↑/⌃P");
+    }
+
+    #[test]
+    fn same_key_for_both_directions_only_moves_up() {
+        let mut app = emacs_move_app();
+        app.config.picker.movement_keys.down = Some("ctrl-p".into());
+
+        assert_eq!(binding_label(&app, Command::MoveUp), "↑/⌃P");
+        assert_eq!(binding_label(&app, Command::MoveDown), "↓");
+    }
+
+    #[test]
+    fn footer_shows_movement_keys() {
+        let app = emacs_move_app();
+        let backend = TestBackend::new(110, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                draw(f, &app);
+            })
+            .unwrap();
+
+        assert!(buffer_text(&terminal).contains("⌃P/⌃N"));
+    }
+
     #[test]
     fn disabled_sources_are_absent_from_filter_bindings_and_footer() {
         let mut app = App::new(Config::default(), Theme::load(None, None, false));

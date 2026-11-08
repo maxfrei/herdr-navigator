@@ -45,10 +45,18 @@ pub(crate) struct Keybind {
     pub(crate) label: String,
     pub(crate) group: &'static str,
     compact_label: Option<&'static str>,
+    compact_key: Option<String>,
     keys: Vec<KeySpec>,
 }
 
 impl KeySpec {
+    fn ctrl_char(&self) -> Option<char> {
+        match self.code {
+            KeyCode::Char(c) if self.modifiers.contains(KeyModifiers::CONTROL) => Some(c),
+            _ => None,
+        }
+    }
+
     fn matches(&self, app: &App, key: KeyEvent) -> bool {
         let modifiers_match = if self.modifiers.is_empty() {
             key.modifiers.is_empty()
@@ -113,14 +121,16 @@ impl Keybind {
         let label = self.compact_label?;
         let key = match &self.command {
             Command::MoveDown if app.config.picker.vim_mode => "j/k".into(),
-            Command::MoveDown => "↑/↓".into(),
             Command::Filter(_) if app.config.picker.vim_mode => self
                 .keys
                 .iter()
                 .find(|spec| matches!(spec.scope, Scope::VimNormal))
                 .map(|spec| spec.label.clone())
                 .unwrap_or_else(|| self.key_label(app)),
-            _ => self.key_label(app),
+            _ => self
+                .compact_key
+                .clone()
+                .unwrap_or_else(|| self.key_label(app)),
         };
         Some((key, label))
     }
@@ -140,15 +150,20 @@ fn directory_template_key(value: &str) -> Option<KeySpec> {
         "alt-enter" | "alt+enter" | "option-enter" | "option+enter" => {
             Some(key(KeyCode::Enter, KeyModifiers::ALT, "⌥↵"))
         }
-        _ => {
-            let key_char = parse_ctrl_key(value)?;
-            Some(key(
-                KeyCode::Char(key_char),
-                KeyModifiers::CONTROL,
-                format!("⌃{}", key_char.to_ascii_uppercase()),
-            ))
-        }
+        _ => parse_ctrl_key(value).map(ctrl_key),
     }
+}
+
+fn ctrl_label(key_char: char) -> String {
+    format!("⌃{}", key_char.to_ascii_uppercase())
+}
+
+fn ctrl_key(key_char: char) -> KeySpec {
+    key(
+        KeyCode::Char(key_char),
+        KeyModifiers::CONTROL,
+        ctrl_label(key_char),
+    )
 }
 
 fn vim_key(code: KeyCode, label: impl Into<String>) -> KeySpec {
@@ -173,10 +188,62 @@ fn binding(
         label: label.into(),
         group,
         compact_label,
+        compact_key: None,
     }
 }
 
 pub(crate) fn keybindings(app: &App) -> Vec<Keybind> {
+    let mut bindings = base_keybindings(app);
+    let (up, down) = movement_ctrl_keys(app, &bindings);
+    let is_movement = |c: char| up == Some(c) || down == Some(c);
+    for binding in &mut bindings {
+        match binding.command {
+            Command::MoveUp => binding.keys.extend(up.map(ctrl_key)),
+            Command::MoveDown => {
+                binding.keys.extend(down.map(ctrl_key));
+                binding.compact_key = Some(format!(
+                    "{}/{}",
+                    up.map_or_else(|| "↑".into(), ctrl_label),
+                    down.map_or_else(|| "↓".into(), ctrl_label),
+                ));
+            }
+            // A filter whose Ctrl chord became a movement key keeps only its Vim
+            // key, so help and hints never advertise a chord that would not fire.
+            Command::Filter(_) => binding
+                .keys
+                .retain(|spec| !spec.ctrl_char().is_some_and(is_movement)),
+            _ => {}
+        }
+    }
+    bindings
+}
+
+/// Movement keys yield to every fixed Ctrl action, derived from the keymap so a
+/// new action cannot be silently shadowed. Source filters yield to movement keys.
+fn movement_ctrl_keys(app: &App, bindings: &[Keybind]) -> (Option<char>, Option<char>) {
+    let mut taken: Vec<char> = bindings
+        .iter()
+        .filter(|binding| !matches!(binding.command, Command::Filter(_)))
+        .flat_map(|binding| &binding.keys)
+        .filter_map(KeySpec::ctrl_char)
+        .collect();
+    // The template binding only exists for some selections; reserve its key always
+    // so movement does not change with the selected entry.
+    taken.extend(parse_ctrl_key(&app.config.picker.directory_template_key));
+
+    let movement = &app.config.picker.movement_keys;
+    let resolve = |value: &Option<String>| {
+        value
+            .as_deref()
+            .and_then(parse_ctrl_key)
+            .filter(|c| !taken.contains(c))
+    };
+    let up = resolve(&movement.up);
+    let down = resolve(&movement.down).filter(|c| up != Some(*c));
+    (up, down)
+}
+
+fn base_keybindings(app: &App) -> Vec<Keybind> {
     let mut bindings = vec![
         binding(
             Command::Back,
@@ -217,11 +284,7 @@ pub(crate) fn keybindings(app: &App) -> Vec<Keybind> {
         bindings.push(binding(
             Command::Filter(source.clone()),
             vec![
-                key(
-                    KeyCode::Char(filter_key),
-                    KeyModifiers::CONTROL,
-                    format!("⌃{}", filter_key.to_ascii_uppercase()),
-                ),
+                ctrl_key(filter_key),
                 vim_key(KeyCode::Char(filter_key), filter_key.to_string()),
             ],
             source_help_label(&source),

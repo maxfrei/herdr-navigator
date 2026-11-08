@@ -118,7 +118,7 @@ Every source can be disabled. Missing optional tools degrade quietly.
 | type | Fuzzy search |
 | `Enter` | Open selected item normally |
 | `Alt-Enter` | Apply `picker.directory_template` to the selected zoxide/root directory |
-| `Up` / `Down` | Move selection |
+| `Up` / `Down` | Move selection (add Ctrl keys with `[picker.movement_keys]`) |
 | `Tab` | Cycle source filters |
 | `Ctrl-W` | Workspaces |
 | `Ctrl-A` / `@` | Agents, using configured status order |
@@ -229,6 +229,10 @@ check_updates = true # daily background release check
 # directory_template_key = "alt-enter" # or ctrl-g / ctrl-t
 vim_mode = false
 
+# [picker.movement_keys] # extra selection keys; arrows keep working
+# up = "ctrl-p"
+# down = "ctrl-n"
+
 [notifications]
 enabled = true
 audio = false # set true to enable sound
@@ -267,6 +271,7 @@ Useful config surfaces:
 - `picker.directory_template = "default.toml"` reuses that Herdr Plus project file from its `projects/` config directory. `Enter` keeps normal reuse/create behavior. `picker.directory_template_key` defaults to `alt-enter` and also accepts Ctrl forms such as `ctrl-g`; the shortcut always applies all template tabs, panes, labels, and commands using the selected directory instead of the template's `working_dir`, creating the workspace or appending fresh template tabs.
 - `[notifications]` can disable notifications entirely or use Herdr's default sounds, no sound, or a custom audio file.
 - `[picker.filter_keys]` remaps source shortcuts.
+- `[picker.movement_keys]` adds `up` / `down` Ctrl keys for moving the selection, including while typing a search, using the same value forms as `filter_keys`. A movement key takes priority over a source filter on the same key, so `up = "ctrl-p"` needs `project = "ctrl-g"` (or similar) under `[picker.filter_keys]` to keep a project shortcut. Keys owned by fixed actions (`ctrl-c`, `ctrl-h`, `ctrl-u`, `ctrl-x`, `ctrl-b`, `ctrl-o`) and a Ctrl `directory_template_key` are ignored.
 - `[[agent_aliases]]` adds memorable search terms without renaming Herdr panes.
 - `[sessions]` controls local sessions and manual remote targets.
 - `[theme]` can select a supported Navigator palette with `theme.name`. With `inherit_herdr = true`, Navigator uses Herdr's configured palette when `theme.name` is unset. If Navigator selects the base palette, inherited Herdr `[theme.custom]` tokens are applied next, then Navigator `[theme.custom]` tokens win. Missing or invalid inherited config falls back to Catppuccin; disabled inheritance with no Navigator name falls back to One Light.
